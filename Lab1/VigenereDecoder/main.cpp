@@ -15,7 +15,7 @@ int main (int argCount, char **argValue)
     if (argCount != 4)
     {
         printf ("Expected arguments:\n"
-                "    - text file to encode.\n"
+                "    - text file to decode.\n"
                 "    - text file with key.\n"
                 "    - output file name.\n");
         return ERROR_INCORRECT_ARGUMENTS;
@@ -45,10 +45,17 @@ int main (int argCount, char **argValue)
     std::size_t keyIndex = 0;
     for (char input : inputFile)
     {
-        int offset;
+        int offset = -1;
         if (IsVigenereSupportedSymbol (input, offset))
         {
-            fputc (offset + (input - offset + key[keyIndex]) % ALPHABET_SIZE, outputFile);
+            int decoded = (input - offset - key[keyIndex]);
+            if (decoded < 0)
+            {
+                decoded = ALPHABET_SIZE + decoded;
+            }
+
+            decoded %= ALPHABET_SIZE;
+            fputc (offset + decoded, outputFile);
 
             // TODO: Or increase key index anyway?
             keyIndex = (keyIndex + 1) % key.size ();
