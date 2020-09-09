@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdio>
+#include <memory>
 
 class IterableInputFile final
 {
@@ -7,10 +8,13 @@ public:
     class ByteIterator final
     {
     public:
+        ByteIterator (const ByteIterator &other);
         ~ByteIterator ();
+        std::size_t GetPosition ();
 
-        char operator *() const;
-        void operator++();
+        char operator* () const;
+        void operator++ ();
+        ByteIterator &operator+= (int offset);
 
         bool operator== (const ByteIterator &rhs) const;
         bool operator!= (const ByteIterator &rhs) const;
@@ -21,11 +25,11 @@ public:
         ByteIterator (const char *path, bool binary);
         ByteIterator ();
 
-        FILE *file_;
+        std::shared_ptr <FILE> file_;
         int lastReadResult_;
     };
 
-    IterableInputFile(const char *path, bool binary);
+    IterableInputFile (const char *path, bool binary);
     ~IterableInputFile () = default;
 
     ByteIterator begin ();

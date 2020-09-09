@@ -7,8 +7,8 @@
 
 #define ERROR_INCORRECT_ARGUMENTS -1
 #define ERROR_NO_INPUT -2
-#define ERROR_NO_KEY -2
-#define ERROR_NO_OUTPUT -3
+#define ERROR_NO_KEY -3
+#define ERROR_NO_OUTPUT -4
 
 int main (int argCount, char **argValue)
 {

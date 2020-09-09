@@ -1,10 +1,31 @@
 #include "File.hpp"
 
+struct FileDeleter
+{
+    void operator() (FILE *file)
+    {
+        fclose (file);
+    }
+};
+
+IterableInputFile::ByteIterator::ByteIterator (const IterableInputFile::ByteIterator &other)
+    : file_ (other.file_), lastReadResult_ (other.lastReadResult_)
+{
+}
+
 IterableInputFile::ByteIterator::~ByteIterator ()
 {
-    if (file_ != nullptr)
+}
+
+std::size_t IterableInputFile::ByteIterator::GetPosition ()
+{
+    if (file_ == nullptr)
     {
-        fclose (file_);
+        return -1;
+    }
+    else
+    {
+        return ftell (file_.get ());
     }
 }
 
@@ -17,13 +38,27 @@ void IterableInputFile::ByteIterator::operator++ ()
 {
     if (file_ != nullptr)
     {
-        lastReadResult_ = fgetc (file_);
+        lastReadResult_ = fgetc (file_.get ());
     }
 
     if (lastReadResult_ == EOF)
     {
         file_ = nullptr;
     }
+}
+
+IterableInputFile::ByteIterator &IterableInputFile::ByteIterator::operator+= (int offset)
+{
+    if (file_ != nullptr && fseek (file_.get (), offset, SEEK_CUR) == 0)
+    {
+        operator++ ();
+    }
+    else
+    {
+        file_ = nullptr;
+    }
+
+    return *this;
 }
 
 bool IterableInputFile::ByteIterator::operator== (const IterableInputFile::ByteIterator &rhs) const
@@ -37,13 +72,13 @@ bool IterableInputFile::ByteIterator::operator!= (const IterableInputFile::ByteI
 }
 
 IterableInputFile::ByteIterator::ByteIterator (const char *path, bool binary)
-    : file_ (fopen (path, binary ? "rb" : "r"))
+    : file_ (fopen (path, binary ? "rb" : "r"), FileDeleter ())
 {
     operator++ ();
 }
 
 IterableInputFile::ByteIterator::ByteIterator ()
-    : file_ (nullptr)
+    : file_ (nullptr, FileDeleter ())
 {
 }
 
