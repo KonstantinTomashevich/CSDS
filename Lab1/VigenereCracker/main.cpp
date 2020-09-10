@@ -114,15 +114,13 @@ std::size_t PredictKeyLength (IterableInputFile &inputFile, std::size_t subseque
     return bestDivisor.divisor;
 }
 
-static const char *ENGLISH_SYMBOLS_FREQUENCY_ORDER = "ETAOINSRRHDLUCMFYWGPBVKXQJZ";
-
 int main (int argCount, char **argValue)
 {
     if (argCount != 3)
     {
         printf ("Expected arguments:\n"
                 "    - text file to crack.\n"
-                "    - output file name.\n");
+                "    - key output file name.\n");
         return ERROR_INCORRECT_ARGUMENTS;
     }
 
@@ -162,61 +160,19 @@ int main (int argCount, char **argValue)
         }
     }
 
-    std::vector <std::vector <int>> replacementTable;
     for (partIndex = 0; partIndex < keyLength; ++partIndex)
     {
-        // TODO: Remove debug outputs there?
-        std::vector <int> orderedSymbols {};
-        
-        for (int fillerIndex = 0; fillerIndex < ALPHABET_SIZE; ++fillerIndex)
+#define MOST_FREQUENT_SYMBOL_CODE ('e' - 'a')
+        int maxElementCode = std::max_element (
+            counters[partIndex].begin (), counters[partIndex].end ()) - counters[partIndex].begin ();
+
+        int offset = maxElementCode - MOST_FREQUENT_SYMBOL_CODE;
+        if (offset < 0)
         {
-            orderedSymbols.push_back (fillerIndex);
-            printf ("%c %d ", fillerIndex + 'a', counters[partIndex][fillerIndex]);
+            offset += ALPHABET_SIZE;
         }
 
-        printf ("\n");
-        std::sort (orderedSymbols.begin (), orderedSymbols.end (),
-                   [partIndex, &counters] (const int &first, const int &second)
-                   {
-                       if (counters[partIndex][first] != counters[partIndex][second])
-                       {
-                           return counters[partIndex][first] > counters[partIndex][second];
-                       }
-                       else
-                       {
-                           return first > second;
-                       }
-                   });
-
-        for (int symbolIndex = 0; symbolIndex < ALPHABET_SIZE; ++symbolIndex)
-        {
-            printf ("%c", orderedSymbols[symbolIndex] + 'a');
-        }
-
-        printf ("\n");
-        std::vector <int> partReplacements (ALPHABET_SIZE, 0);
-        for (int symbolIndex = 0; symbolIndex < orderedSymbols.size (); ++symbolIndex)
-        {
-            printf ("%c = %c\n", orderedSymbols[symbolIndex] + 'a', ENGLISH_SYMBOLS_FREQUENCY_ORDER[symbolIndex]);
-            partReplacements[orderedSymbols[symbolIndex]] = ENGLISH_SYMBOLS_FREQUENCY_ORDER[symbolIndex] - 'A';
-        }
-
-        replacementTable.emplace_back (partReplacements);
-    }
-
-    partIndex = 0;
-    for (char input : inputFile)
-    {
-        int offset = -1;
-        if (IsVigenereSupportedSymbol (input, offset))
-        {
-            fputc (replacementTable[partIndex][input - offset] + offset, outputFile);
-            partIndex = (partIndex + 1) % keyLength;
-        }
-        else
-        {
-            fputc (input, outputFile);
-        }
+        fputc ('a' + offset, outputFile);
     }
 
     fclose (outputFile);
