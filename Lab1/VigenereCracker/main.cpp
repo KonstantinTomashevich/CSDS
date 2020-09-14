@@ -96,7 +96,7 @@ std::size_t PredictKeyLength (IterableInputFile &inputFile, std::size_t subseque
     std::unordered_map <std::size_t, std::size_t> counts = CalculateDivisors (
         FindDistances (inputFile, subsequenceLength), total);
 
-#define PURE_MAXIMIZATION_BARRIER 0.075f
+#define PURE_MAXIMIZATION_BARRIER 0.06f
     struct
     {
         std::size_t divisor;
