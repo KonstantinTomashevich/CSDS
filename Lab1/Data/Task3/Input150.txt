@@ -1,0 +1,156 @@
+Bash Shell Loop Over Set of Files
+ Author: Vivek Gite Last updated: June 29,
+2010 47 comments
+
+ How do I run shell loop over set of files stored in a
+current directory or specified directory?
+
+ You can use for loop easily over a
+set of shell file under bash or any other UNIX shell using wild card character.
+
+ ADVERTISEMENTS
+ Syntax
+ The general syntax is as follows:
+
+ for f in file1
+file2 file3 file5
+ do
+  echo "Processing $f"
+  # do something on $f
+ done
+ You
+can also use shell variables:
+
+ FILES="file1
+ /path/to/file2
+/etc/resolv.conf"
+ for f in $FILES
+ do
+ 	echo "Processing $f"
+ done
+ You can
+loop through all files such as *.c, enter:
+
+ $ for f in *.c; do echo
+"Processing $f file.."; done
+ Sample Shell Script To Loop Through All Files
+#!/bin/bash
+ FILES=/path/to/*
+ for f in $FILES
+ do
+   echo "Processing $f
+file..."
+   # take action on each file. $f store current file name
+   cat $f
+done
+ Filename Expansion
+ You can do filename expansion in loop such as work on
+all pdf files in current directory:
+
+ for f in *.pdf
+ do
+ 	echo "Removing
+password for pdf file - $f"
+ done
+ However, there is one problem with the above
+syntax. If there are no pdf files in current directory it will expand to *.pdf
+(i.e. f will be set to *.pdf”). To avoid this problem add the following
+statement before the for loop:
+
+ #!/bin/bash
+ # Usage: remove all utility bills
+pdf file password
+ shopt -s nullglob
+ for f in *.pdf
+ do
+ 	echo "Removing
+password for pdf file - $f"
+         pdftk "$f" output "output.$f" user_pw
+"YOURPASSWORD-HERE"
+ done
+ Using A Shell Variable And While Loop
+ You can read
+list of files from a text file. For example, create a text file called
+/tmp/data.txt as follows:
+
+ file1
+ file2
+ file3
+ Now you can use the while loop
+as follows to read and process each by one by one:
+
+ #!/bin/bash
+         while
+IFS= read -r file
+         do
+                 [ -f "$file" ] && rm -f "$file"
+
+done < "/tmp/data.txt"
+ Here is another example which removes all unwanted files
+from chrooted lighttpd / nginx or Apache webserver:
+
+ #!/bin/bash
+_LIGHTTPD_ETC_DEL_CHROOT_FILES="/usr/local/nixcraft/conf/apache/secure/db/dir.etc.list"
+secureEtcDir(){
+         local d="$1"
+         local _d="/jails/apache/$d/etc"
+
+local __d=""
+         [ -f "$_LIGHTTPD_ETC_DEL_CHROOT_FILES" ] || { echo
+"Warning: $_LIGHTTPD_ETC_DEL_CHROOT_FILES file not found. Cannot secure files in
+jail etc directory."; return; }
+         echo "* Cleaning etc FILES at: \"$_d\"
+..."
+         while IFS= read -r file
+         do
+
+__d="$_d/$file"
+                 [ -f "$__d" ] && rm -f "$__d"
+         done <
+"$_LIGHTTPD_ETC_DEL_CHROOT_FILES"
+ }
+
+ secureEtcDir "nixcraft.net.in"
+Processing Command Line Arguments
+ #!/bin/bash
+ # make sure you always put $f in
+double quotes to avoid any nasty surprises i.e. "$f"
+ for f in $*
+ do
+   echo
+"Processing $f file..."
+   # rm "$f"
+ done
+ OR
+
+ #!/bin/bash
+ # make sure you
+always put $f in double quotes to avoid any nasty surprises i.e. "$f"
+ for f in
+$@
+ do
+   echo "Processing $f file..."
+   # rm "$f"
+ done
+ Please note that $@
+expanded as “$1” “$2” “$3” … “$n” and $* expanded as “$1y$2y$3y…$n”, where y is
+the value of IFS variable i.e. “$*” is one long string and $IFS act as an
+separator or token delimiters.
+ The following example use shell variables to
+store actual path names and then files are processed using the for loop:
+
+#!/bin/bash
+ _base="/jail/.conf"
+ _dfiles="${base}/nginx/etc/conf/*.conf"
+
+for f in $_dfiles
+ do
+         lb2file="/tmp/${f##*/}.$$"   #tmp file
+
+sed 's/Load_Balancer-1/Load_Balancer-2/' "$f" > "${lb2file}"   # update
+signature
+         scp "${lb2file}" nginx@lb2.nixcraft.net.in:${f}   # scp
+updated file to lb2
+         rm -f "${lb2file}"
+ done
+ Updated for accuracy!
