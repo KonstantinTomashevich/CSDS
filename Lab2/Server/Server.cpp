@@ -1,5 +1,6 @@
 #include "Server.hpp"
 #include "Session.hpp"
+#include <boost/log/trivial.hpp>
 
 Server::Server (boost::asio::io_context &ioContext, short port)
     : ioContext_ (ioContext),
@@ -16,7 +17,7 @@ void Server::StartAccept ()
     }
 
     auto *newSession = new Session (ioContext_);
-    std::cout << "Server: Waiting for next client..." << std::endl;
+    BOOST_LOG_TRIVIAL(info) << "Server: Waiting for next client...";
 
     acceptor_.async_accept (newSession->GetSocket (),
                             [this, newSession] (const boost::system::error_code &error)
