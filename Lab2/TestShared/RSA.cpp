@@ -11,11 +11,11 @@ BOOST_AUTO_TEST_CASE (EncodeDecode)
     RSA::GenerateKeys (publicKey, privateKey);
 
     std::vector <uint8_t> messageBytes = {14, 66, 99, 42, 48, 99, 164, 244, 122, 90, 49, 11, 23, 41, 54, 67};
-    boost::multiprecision::cpp_int message;
+    boost::multiprecision::int256_t message;
     boost::multiprecision::import_bits (message, messageBytes.begin (), messageBytes.end ());
 
     BOOST_REQUIRE (message < publicKey.n);
-    boost::multiprecision::cpp_int messageCopy = message;
+    boost::multiprecision::int256_t messageCopy = message;
 
     RSA::Encode (publicKey, message);
     BOOST_REQUIRE (message != messageCopy);
