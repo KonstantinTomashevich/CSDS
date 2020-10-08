@@ -70,18 +70,55 @@ int main (int argc, char *argv[])
             // Clean buffer, so we'll be able to check if decoded session key size is really 128 bits.
             buffer.fill (0);
             boost::multiprecision::export_bits (sessionKey, buffer.begin () + 1, 8);
+            std::copy (buffer.begin () + 1, buffer.begin () + 1 + RSA::MESSAGE_SIZE / 2, currentSessionKey.begin ());
 
-            for (int index = 0; index < RSA::MESSAGE_SIZE; ++index)
+            for (int index = RSA::MESSAGE_SIZE / 2; index < RSA::MESSAGE_SIZE; ++index)
             {
-                if (index < RSA::MESSAGE_SIZE / 2)
-                {
-                    currentSessionKey[index] = buffer[index + 1];
-                }
-                else if (buffer[index + 1] > 0)
+                if (buffer[index + 1] > 0)
                 {
                     BOOST_LOG_TRIVIAL(error) << "Unable to downcast decoded session key to 128 bits!";
                     return 1;
                 }
+            }
+        }
+
+        std::string login = "TestLogin";
+        std::string password = "qwerty_1234567890!lf";
+
+        BOOST_LOG_TRIVIAL (info) << "Sending auth info...";
+        {
+            uint16_t loginSize = (uint16_t) login.size ();
+            uint16_t passwordSize = (uint16_t) password.size ();
+
+            Idea::Block initialBlock;
+            Idea::GenerateInitialBlock (initialBlock);
+
+            std::stringbuf messageBuffer;
+            std::ostream outputStream (&messageBuffer);
+
+            outputStream.put ((char) MessageType::CTS_AUTH_REQUEST);
+            outputStream.write ((const char *) &initialBlock[0], initialBlock.size ());
+            outputStream.write ((const char *) &loginSize, sizeof (loginSize));
+            outputStream.write ((const char *) &passwordSize, sizeof (passwordSize));
+
+            std::istringstream loginPasswordStream (login + password);
+            Idea::EncodeCBC (initialBlock, currentSessionKey,
+                             Idea::StreamProducer (loginPasswordStream), Idea::StreamConsumer (outputStream));
+
+            std::string message = messageBuffer.str ();
+            std::copy (message.begin (), message.end (), buffer.begin ());
+            boost::asio::write (socket, boost::asio::buffer (buffer, message.size ()), boost::asio::transfer_all ());
+        }
+
+        BOOST_LOG_TRIVIAL (info) << "Waiting for auth response...";
+        {
+            boost::asio::read (socket, boost::asio::buffer (buffer, 1), boost::asio::transfer_all ());
+            if (buffer[0] != (uint8_t) MessageType::STC_AUTH_SUCCESSFUL)
+            {
+                BOOST_LOG_TRIVIAL(error) << "Expected message with code " <<
+                                         (uint8_t) MessageType::STC_AUTH_SUCCESSFUL <<
+                                         ", but received " << buffer[0] << ".";
+                return 1;
             }
         }
     }

@@ -18,9 +18,10 @@ public:
 
 private:
     void AsyncWaitForInput (std::size_t expectedCount = 1);
-    void GenerateSessionKey();
-    void ReadRSAKey();
-    void WriteSessionKey();
+    void GenerateSessionKey ();
+    void ReadRSAKey ();
+    void WriteSessionKey ();
+    bool ReadAndValidateAuth ();
 
     boost::asio::ip::tcp::socket socket_;
     std::unique_ptr <StateMachine> stateMachine_;
@@ -28,4 +29,6 @@ private:
     RSA::PublicKey rsaPublicKey_;
     Idea::Key currentSessionKey_;
     std::array <uint8_t, 1024> buffer_;
+
+    std::size_t userToken_ = 0;
 };

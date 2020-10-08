@@ -1,7 +1,9 @@
 #include "Session.hpp"
 #include <boost/random.hpp>
 #include <boost/log/trivial.hpp>
+
 #include <Shared/MessageType.hpp>
+#include "AuthService.hpp"
 
 namespace States
 {
@@ -93,7 +95,7 @@ void Session::Start ()
                     {
                         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Entered state " <<
                                                  States::WAITING_FOR_AUTH << "!";
-                        // TODO: Implement.
+                        AsyncWaitForInput (1 + Idea::BLOCK_SIZE + sizeof (uint16_t) * 2);
                         return {};
                     },
                     {
@@ -101,7 +103,6 @@ void Session::Start ()
                             (char) MessageType::CTS_AUTH_REQUEST,
                             [this] () -> std::string
                             {
-                                // TODO: Implement.
                                 return States::VALIDATING_AUTH;
                             }
                         }
@@ -116,15 +117,17 @@ void Session::Start ()
                     {
                         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Entered state " <<
                                                  States::VALIDATING_AUTH << "!";
-                        // TODO: Implement.
-                        return (char) (true ? MessageType::STC_AUTH_SUCCESSFUL : MessageType::STC_AUTH_FAILED);
+                        return (char) (ReadAndValidateAuth () ?
+                                       MessageType::STC_AUTH_SUCCESSFUL : MessageType::STC_AUTH_FAILED);
                     },
                     {
                         {
                             (char) MessageType::STC_AUTH_SUCCESSFUL,
                             [this] () -> std::string
                             {
-                                // TODO: Implement.
+                                buffer_[0] = (char) MessageType::STC_AUTH_SUCCESSFUL;
+                                boost::asio::write (socket_, boost::asio::buffer (buffer_, 1),
+                                                    boost::asio::transfer_all ());
                                 return States::WAITING_FOR_QUERIES;
                             }
                         },
@@ -133,7 +136,9 @@ void Session::Start ()
                             (char) MessageType::STC_AUTH_FAILED,
                             [this] () -> std::string
                             {
-                                // TODO: Implement.
+                                buffer_[0] = (char) MessageType::STC_AUTH_FAILED;
+                                boost::asio::write (socket_, boost::asio::buffer (buffer_, 1),
+                                                    boost::asio::transfer_all ());
                                 return States::WAITING_FOR_AUTH;
                             }
                         }
@@ -232,7 +237,7 @@ void Session::GenerateSessionKey ()
 {
     boost::random::mt11213b base_gen (clock ());
     boost::random::independent_bits_engine <boost::random::mt11213b,
-                                            128, boost::multiprecision::uint128_t> gen (base_gen);
+                                            Idea::KEY_SIZE * 8, boost::multiprecision::uint128_t> gen (base_gen);
 
     boost::multiprecision::uint128_t sessionKey = gen ();
     boost::multiprecision::export_bits (sessionKey, currentSessionKey_.begin (), 8);
@@ -265,4 +270,36 @@ void Session::WriteSessionKey ()
 
     boost::asio::write (socket_, boost::asio::buffer (buffer_, 1 + RSA::MESSAGE_SIZE), boost::asio::transfer_all ());
     BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Encoded session key sent: " << sessionKey << "!";
+}
+
+bool Session::ReadAndValidateAuth ()
+{
+    Idea::Block initialBlock;
+    std::copy (buffer_.begin () + 1, buffer_.begin () + 1 + initialBlock.size (), initialBlock.begin ());
+    uint16_t loginSize = *(uint16_t *) &*(buffer_.begin () + 1 + initialBlock.size ());
+    uint16_t passwordSize = *(uint16_t *) &*(buffer_.begin () + 1 + initialBlock.size () + sizeof (uint16_t));
+
+    uint16_t stringSize = loginSize + passwordSize;
+    uint16_t blockCount = stringSize / 8;
+
+    if (stringSize % 8 > 0)
+    {
+        ++blockCount;
+    }
+
+    boost::asio::read (socket_, boost::asio::buffer (buffer_, blockCount * Idea::BLOCK_SIZE),
+                       boost::asio::transfer_all ());
+    std::stringbuf loginPasswordBuffer;
+    std::ostream loginPasswordOutputStream (&loginPasswordBuffer);
+
+    Idea::DecodeCBC (initialBlock, currentSessionKey_,
+                     Idea::ByteIteratorProducer (buffer_.begin (), buffer_.begin () + Idea::BLOCK_SIZE * blockCount),
+                     Idea::StreamConsumer (loginPasswordOutputStream));
+
+    std::string login = loginPasswordBuffer.str ().substr (0, loginSize);
+    std::string password = loginPasswordBuffer.str ().substr (loginSize, passwordSize);
+
+    BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Received auth request with login \"" << login <<
+                             "\" and password \"" + password + "\".";
+    return AuthService::check (login, password, userToken_);
 }

@@ -1,5 +1,7 @@
 #include "Idea.hpp"
 #include <cstdint>
+#include <boost/random.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
 
 typedef void (*idea_gen_key) (uint16_t[52], const uint16_t[8]);
 
@@ -167,6 +169,53 @@ void EncodeBlock (Block &block, const Key &key)
 void DecodeBlock (Block &block, const Key &key)
 {
     IDEA ((uint16_t *) block.data (), (const uint16_t *) key.data (), decrypt);
+}
+
+void GenerateInitialBlock (Block &output)
+{
+    boost::random::mt11213b base_gen (clock ());
+    boost::random::independent_bits_engine <boost::random::mt11213b,
+                                            BLOCK_SIZE * 8, uint64_t> gen (base_gen);
+
+    uint64_t initialBlock = gen ();
+    *(uint64_t *) &output[0] = initialBlock;
+}
+
+StreamProducer::StreamProducer (std::istream &stream)
+    : stream_ (stream)
+{
+}
+
+bool StreamProducer::operator() (Block &block)
+{
+    if (stream_)
+    {
+        block.fill (0);
+        stream_.read ((char *) &block[0], block.size ());
+
+        if (stream_)
+        {
+            return true;
+        }
+        else
+        {
+            return stream_.gcount () > 0;
+        }
+    }
+    else
+    {
+        return false;
+    }
+}
+
+StreamConsumer::StreamConsumer (std::ostream &stream)
+    : stream_ (stream)
+{
+}
+
+void StreamConsumer::operator() (const Block &block)
+{
+    stream_.write ((const char *) &block[0], block.size ());
 }
 }
 
