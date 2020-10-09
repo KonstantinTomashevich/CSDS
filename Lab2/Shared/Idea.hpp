@@ -18,7 +18,7 @@ void DecodeBlock (Block &block, const Key &key);
 void GenerateInitialBlock (Block &output);
 
 template <typename ProducerFunctor, typename ConsumerFunctor>
-void EncodeCBC (const Block &initial, const Key &key, ProducerFunctor producer, ConsumerFunctor consumer)
+Block EncodeCBC (const Block &initial, const Key &key, ProducerFunctor producer, ConsumerFunctor consumer)
 {
     Block state = initial;
     Block working;
@@ -34,10 +34,12 @@ void EncodeCBC (const Block &initial, const Key &key, ProducerFunctor producer, 
         state = working;
         consumer (working);
     }
+
+    return state;
 }
 
 template <typename ProducerFunctor, typename ConsumerFunctor>
-void DecodeCBC (const Block &initial, const Key &key, ProducerFunctor producer, ConsumerFunctor consumer)
+Block DecodeCBC (const Block &initial, const Key &key, ProducerFunctor producer, ConsumerFunctor consumer)
 {
     Block state = initial;
     Block working;
@@ -55,6 +57,8 @@ void DecodeCBC (const Block &initial, const Key &key, ProducerFunctor producer, 
 
         consumer (working);
     }
+
+    return state;
 }
 
 class StreamProducer final

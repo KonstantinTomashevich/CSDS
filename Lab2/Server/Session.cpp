@@ -1,9 +1,11 @@
 #include "Session.hpp"
 #include <boost/random.hpp>
 #include <boost/log/trivial.hpp>
+#include <fstream>
 
 #include <Shared/MessageType.hpp>
 #include "AuthService.hpp"
+#include "FileService.hpp"
 
 namespace States
 {
@@ -95,7 +97,7 @@ void Session::Start ()
                     {
                         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Entered state " <<
                                                  States::WAITING_FOR_AUTH << "!";
-                        AsyncWaitForInput (1 + Idea::BLOCK_SIZE + sizeof (uint16_t) * 2);
+                        AsyncWaitForInput (1 + Idea::BLOCK_SIZE + sizeof (uint8_t) * 2);
                         return {};
                     },
                     {
@@ -126,8 +128,12 @@ void Session::Start ()
                             [this] () -> std::string
                             {
                                 buffer_[0] = (char) MessageType::STC_AUTH_SUCCESSFUL;
+                                boost::system::error_code error;
+
                                 boost::asio::write (socket_, boost::asio::buffer (buffer_, 1),
-                                                    boost::asio::transfer_all ());
+                                                    boost::asio::transfer_all (), error);
+
+                                AbortOnFatalError (error);
                                 return States::WAITING_FOR_QUERIES;
                             }
                         },
@@ -137,8 +143,12 @@ void Session::Start ()
                             [this] () -> std::string
                             {
                                 buffer_[0] = (char) MessageType::STC_AUTH_FAILED;
+                                boost::system::error_code error;
+
                                 boost::asio::write (socket_, boost::asio::buffer (buffer_, 1),
-                                                    boost::asio::transfer_all ());
+                                                    boost::asio::transfer_all (), error);
+
+                                AbortOnFatalError (error);
                                 return States::WAITING_FOR_AUTH;
                             }
                         }
@@ -153,7 +163,7 @@ void Session::Start ()
                     {
                         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Entered state " <<
                                                  States::WAITING_FOR_QUERIES << "!";
-                        // TODO: Implement.
+                        AsyncWaitForInput (1 + Idea::BLOCK_SIZE + sizeof (uint8_t));
                         return {};
                     },
                     {
@@ -161,7 +171,6 @@ void Session::Start ()
                             (char) MessageType::STC_SESSION_KEY,
                             [this] () -> std::string
                             {
-                                // TODO: Implement.
                                 return States::WAITING_FOR_QUERIES;
                             }
                         },
@@ -170,8 +179,7 @@ void Session::Start ()
                             (char) MessageType::CTS_FILE_REQUEST,
                             [this] () -> std::string
                             {
-                                // TODO: Implement.
-                                return States::WAITING_FOR_QUERIES;
+                                return States::SENDING_FILE;
                             }
                         }
                     }
@@ -185,15 +193,13 @@ void Session::Start ()
                     {
                         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Entered state " <<
                                                  States::SENDING_FILE << "!";
-                        // TODO: Implement.
-                        return (char) (true ? MessageType::STC_FILE : MessageType::STC_UNABLE_TO_SEND_FILE);
+                        return (char) (TrySendFile () ? MessageType::STC_FILE : MessageType::STC_UNABLE_TO_SEND_FILE);
                     },
                     {
                         {
                             (char) MessageType::STC_FILE,
                             [this] () -> std::string
                             {
-                                // TODO: Implement.
                                 return States::WAITING_FOR_QUERIES;
                             }
                         },
@@ -202,7 +208,13 @@ void Session::Start ()
                             (char) MessageType::STC_UNABLE_TO_SEND_FILE,
                             [this] () -> std::string
                             {
-                                // TODO: Implement.
+                                buffer_[0] = (char) MessageType::STC_UNABLE_TO_SEND_FILE;
+                                boost::system::error_code error;
+
+                                boost::asio::write (socket_, boost::asio::buffer (buffer_, 1),
+                                                    boost::asio::transfer_all (), error);
+
+                                AbortOnFatalError (error);
                                 return States::WAITING_FOR_QUERIES;
                             }
                         }
@@ -214,21 +226,45 @@ void Session::Start ()
     );
 }
 
+void Session::Abort ()
+{
+    delete this;
+}
+
+void Session::AbortOnFatalError (const boost::system::error_code &error)
+{
+    if (error)
+    {
+        BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Caught error " << error << ", aborting...";
+        Abort ();
+        throw std::runtime_error ("Session aborted!");
+    }
+}
+
 void Session::AsyncWaitForInput (std::size_t expectedCount)
 {
-
     boost::asio::async_read (socket_, boost::asio::buffer (buffer_), boost::asio::transfer_exactly (expectedCount),
-                             [this] (const boost::system::error_code &error, std::size_t bytesTransferred) -> void
+                             [this] (const boost::system::error_code &error,
+                                     std::size_t bytesTransferred) -> void
                              {
-                                 if (error)
-                                 {
-                                     BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Caught error " << error
-                                                              << ", aborting...";
-                                     delete this;
-                                 }
-                                 else
+                                 AbortOnFatalError (error);
+                                 try
                                  {
                                      stateMachine_->Consume (buffer_[0]);
+                                 }
+                                 catch (StateMachine::UnsupportedCodeException &exception)
+                                 {
+                                     // TODO: Better exception logging.
+                                     BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Caught exception " <<
+                                                              exception.what () << ", aborting...";
+                                     Abort ();
+                                 }
+                                 catch (StateMachine::StateNotExistsException &exception)
+                                 {
+                                     // TODO: Better exception logging.
+                                     BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Caught exception " <<
+                                                              exception.what () << ", aborting...";
+                                     Abort ();
                                  }
                              });
 }
@@ -268,7 +304,11 @@ void Session::WriteSessionKey ()
     RSA::Encode (rsaPublicKey_, sessionKey);
     boost::multiprecision::export_bits (sessionKey, buffer_.begin () + 1, 8);
 
-    boost::asio::write (socket_, boost::asio::buffer (buffer_, 1 + RSA::MESSAGE_SIZE), boost::asio::transfer_all ());
+    boost::system::error_code error;
+    boost::asio::write (socket_, boost::asio::buffer (buffer_, 1 + RSA::MESSAGE_SIZE),
+                        boost::asio::transfer_all (), error);
+
+    AbortOnFatalError (error);
     BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Encoded session key sent: " << sessionKey << "!";
 }
 
@@ -276,8 +316,8 @@ bool Session::ReadAndValidateAuth ()
 {
     Idea::Block initialBlock;
     std::copy (buffer_.begin () + 1, buffer_.begin () + 1 + initialBlock.size (), initialBlock.begin ());
-    uint16_t loginSize = *(uint16_t *) &*(buffer_.begin () + 1 + initialBlock.size ());
-    uint16_t passwordSize = *(uint16_t *) &*(buffer_.begin () + 1 + initialBlock.size () + sizeof (uint16_t));
+    uint8_t loginSize = *(uint8_t *) &*(buffer_.begin () + 1 + initialBlock.size ());
+    uint8_t passwordSize = *(uint8_t *) &*(buffer_.begin () + 1 + initialBlock.size () + sizeof (uint8_t));
 
     uint16_t stringSize = loginSize + passwordSize;
     uint16_t blockCount = stringSize / 8;
@@ -287,8 +327,11 @@ bool Session::ReadAndValidateAuth ()
         ++blockCount;
     }
 
+    boost::system::error_code error;
     boost::asio::read (socket_, boost::asio::buffer (buffer_, blockCount * Idea::BLOCK_SIZE),
-                       boost::asio::transfer_all ());
+                       boost::asio::transfer_all (), error);
+
+    AbortOnFatalError (error);
     std::stringbuf loginPasswordBuffer;
     std::ostream loginPasswordOutputStream (&loginPasswordBuffer);
 
@@ -302,4 +345,91 @@ bool Session::ReadAndValidateAuth ()
     BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Received auth request with login \"" << login <<
                              "\" and password \"" + password + "\".";
     return AuthService::check (login, password, userToken_);
+}
+
+bool Session::TrySendFile ()
+{
+    Idea::Block initialBlock;
+    std::copy (buffer_.begin () + 1, buffer_.begin () + 1 + initialBlock.size (), initialBlock.begin ());
+
+    uint8_t fileNameSize = *(uint8_t *) &*(buffer_.begin () + 1 + initialBlock.size ());
+    std::size_t blockCount = fileNameSize / 8;
+
+    if (fileNameSize % 8 > 0)
+    {
+        ++blockCount;
+    }
+
+    boost::system::error_code error;
+    boost::asio::read (socket_, boost::asio::buffer (buffer_, blockCount * Idea::BLOCK_SIZE),
+                       boost::asio::transfer_all (), error);
+
+    AbortOnFatalError (error);
+    std::stringbuf fileNameBuffer;
+    std::ostream fileNameStream (&fileNameBuffer);
+
+    Idea::DecodeCBC (initialBlock, currentSessionKey_,
+                     Idea::ByteIteratorProducer (buffer_.begin (), buffer_.begin () + Idea::BLOCK_SIZE * blockCount),
+                     Idea::StreamConsumer (fileNameStream));
+
+    std::string fileName = fileNameBuffer.str ().substr (0, fileNameSize);
+    BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Received request for file \"" << fileName << "\".";
+
+    std::ifstream inputFile = FileService::resolve (fileName);
+    if (!inputFile)
+    {
+        BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Unable to process request for file \"" <<
+                                 fileName << "\"!";
+        return false;
+    }
+
+    BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Sending file \"" << fileName << "\"...";
+    inputFile.seekg (0, inputFile.end);
+    std::size_t fileLength = inputFile.tellg ();
+    inputFile.seekg (0, inputFile.beg);
+
+    Idea::GenerateInitialBlock (initialBlock);
+    for (std::size_t index = 0; index < initialBlock.size (); ++index)
+    {
+        BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Initial block symbol " << index << " is " <<
+                                 (int) initialBlock[index] << ".";
+    }
+
+    buffer_[0] = (char) MessageType::STC_FILE;
+    std::copy (initialBlock.begin (), initialBlock.end (), buffer_.begin () + 1);
+    *(std::size_t *) &buffer_[1 + initialBlock.size ()] = fileLength;
+
+    boost::asio::write (socket_, boost::asio::buffer (buffer_, 1 + Idea::BLOCK_SIZE + sizeof (std::size_t)),
+                        boost::asio::transfer_all (), error);
+
+    AbortOnFatalError (error);
+    while (inputFile)
+    {
+        inputFile.read ((char *) &buffer_[0], buffer_.size ());
+        std::size_t read = inputFile.gcount ();
+
+        blockCount = read / 8;
+        if (read % 8 > 0)
+        {
+            ++blockCount;
+        }
+
+        std::stringbuf encodedBuffer;
+        std::ostream encodedStream (&encodedBuffer);
+
+        initialBlock = Idea::EncodeCBC (
+            initialBlock, currentSessionKey_,
+            Idea::ByteIteratorProducer (buffer_.begin (), buffer_.begin () + Idea::BLOCK_SIZE * blockCount),
+            Idea::StreamConsumer (encodedStream));
+
+        std::string encoded = encodedBuffer.str ();
+        std::copy (encoded.begin (), encoded.end (), buffer_.begin ());
+
+        boost::asio::write (socket_, boost::asio::buffer (buffer_, Idea::BLOCK_SIZE * blockCount),
+                            boost::asio::transfer_all (), error);
+        AbortOnFatalError (error);
+    }
+
+    BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: File \"" << fileName << "\" sent!";
+    return true;
 }

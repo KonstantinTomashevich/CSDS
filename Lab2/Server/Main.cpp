@@ -1,5 +1,6 @@
 #include <iostream>
 #include <boost/asio.hpp>
+#include <boost/log/trivial.hpp>
 #include "Server.hpp"
 
 int main (int argc, char **argv)
@@ -14,7 +15,18 @@ int main (int argc, char **argv)
 
         boost::asio::io_context ioContext;
         Server server (ioContext, std::atoi (argv[1]));
-        ioContext.run ();
+
+        while (true)
+        {
+            try
+            {
+                ioContext.run ();
+            }
+            catch (std::runtime_error &error)
+            {
+                BOOST_LOG_TRIVIAL (error) << "Caught error: " << error.what ();
+            }
+        }
     }
     catch (std::exception &e)
     {

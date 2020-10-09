@@ -17,11 +17,16 @@ public:
     void Start ();
 
 private:
+    void Abort ();
+    void AbortOnFatalError (const boost::system::error_code &error);
+
     void AsyncWaitForInput (std::size_t expectedCount = 1);
     void GenerateSessionKey ();
     void ReadRSAKey ();
+
     void WriteSessionKey ();
     bool ReadAndValidateAuth ();
+    bool TrySendFile ();
 
     boost::asio::ip::tcp::socket socket_;
     std::unique_ptr <StateMachine> stateMachine_;

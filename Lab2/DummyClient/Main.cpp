@@ -87,9 +87,6 @@ int main (int argc, char *argv[])
 
         BOOST_LOG_TRIVIAL (info) << "Sending auth info...";
         {
-            uint16_t loginSize = (uint16_t) login.size ();
-            uint16_t passwordSize = (uint16_t) password.size ();
-
             Idea::Block initialBlock;
             Idea::GenerateInitialBlock (initialBlock);
 
@@ -98,8 +95,8 @@ int main (int argc, char *argv[])
 
             outputStream.put ((char) MessageType::CTS_AUTH_REQUEST);
             outputStream.write ((const char *) &initialBlock[0], initialBlock.size ());
-            outputStream.write ((const char *) &loginSize, sizeof (loginSize));
-            outputStream.write ((const char *) &passwordSize, sizeof (passwordSize));
+            outputStream.put ((uint8_t) login.size ());
+            outputStream.put ((uint8_t) password.size ());
 
             std::istringstream loginPasswordStream (login + password);
             Idea::EncodeCBC (initialBlock, currentSessionKey,
@@ -119,6 +116,87 @@ int main (int argc, char *argv[])
                                          (uint8_t) MessageType::STC_AUTH_SUCCESSFUL <<
                                          ", but received " << buffer[0] << ".";
                 return 1;
+            }
+        }
+
+        std::string testFileName = "test.txt";
+        BOOST_LOG_TRIVIAL (info) << "Requesting file...";
+
+        {
+            Idea::Block initialBlock;
+            Idea::GenerateInitialBlock (initialBlock);
+
+            std::stringbuf messageBuffer;
+            std::ostream outputStream (&messageBuffer);
+
+            outputStream.put ((char) MessageType::CTS_FILE_REQUEST);
+            outputStream.write ((const char *) &initialBlock[0], initialBlock.size ());
+            outputStream.put ((uint8_t) testFileName.size ());
+
+            std::istringstream fileNameStream (testFileName);
+            Idea::EncodeCBC (initialBlock, currentSessionKey,
+                             Idea::StreamProducer (fileNameStream), Idea::StreamConsumer (outputStream));
+
+            std::string message = messageBuffer.str ();
+            std::copy (message.begin (), message.end (), buffer.begin ());
+            boost::asio::write (socket, boost::asio::buffer (buffer, message.size ()), boost::asio::transfer_all ());
+        }
+
+        BOOST_LOG_TRIVIAL (info) << "Reading file...";
+        {
+            boost::asio::read (socket,
+                               boost::asio::buffer (buffer, 1 + Idea::BLOCK_SIZE + sizeof (std::size_t)),
+                               boost::asio::transfer_all ());
+
+            Idea::Block initialBlock;
+            std::copy (buffer.begin () + 1, buffer.begin () + 1 + Idea::BLOCK_SIZE, initialBlock.begin ());
+            std::size_t fileSize = *(std::size_t *) &buffer[1 + initialBlock.size ()];
+
+            if (buffer[0] != (uint8_t) MessageType::STC_FILE)
+            {
+                BOOST_LOG_TRIVIAL(error) << "Expected message with code " <<
+                                         (uint8_t) MessageType::STC_AUTH_SUCCESSFUL <<
+                                         ", but received " << buffer[0] << ".";
+                return 1;
+            }
+
+            for (std::size_t index = 0; index < initialBlock.size (); ++index)
+            {
+                BOOST_LOG_TRIVIAL(debug) << "Initial block symbol " << index << " is " <<
+                                         (int) initialBlock[index] << ".";
+            }
+
+            std::size_t blocksLeft = fileSize / Idea::BLOCK_SIZE;
+            if (fileSize % Idea::BLOCK_SIZE > 0)
+            {
+                ++blocksLeft;
+            }
+
+            const std::size_t blocksInChunk = buffer.size () / Idea::BLOCK_SIZE;
+            while (blocksLeft > 0)
+            {
+                std::size_t blocksToRead = std::min (blocksInChunk, blocksLeft);
+                boost::asio::read (socket,
+                                   boost::asio::buffer (buffer, blocksToRead * Idea::BLOCK_SIZE),
+                                   boost::asio::transfer_all ());
+
+                std::stringbuf decodedBuffer;
+                std::ostream decodedStream (&decodedBuffer);
+
+                initialBlock = Idea::DecodeCBC (
+                    initialBlock, currentSessionKey,
+                    Idea::ByteIteratorProducer (buffer.begin (), buffer.begin () + blocksToRead * Idea::BLOCK_SIZE),
+                    Idea::StreamConsumer (decodedStream));
+
+                std::cout << decodedBuffer.str ();
+                if (blocksLeft > blocksInChunk)
+                {
+                    blocksLeft -= blocksInChunk;
+                }
+                else
+                {
+                    blocksLeft = 0;
+                }
             }
         }
     }
