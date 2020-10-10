@@ -316,8 +316,8 @@ bool Session::ReadAndValidateAuth ()
 {
     Idea::Block initialBlock;
     std::copy (buffer_.begin () + 1, buffer_.begin () + 1 + initialBlock.size (), initialBlock.begin ());
-    uint8_t loginSize = *(uint8_t *) &*(buffer_.begin () + 1 + initialBlock.size ());
-    uint8_t passwordSize = *(uint8_t *) &*(buffer_.begin () + 1 + initialBlock.size () + sizeof (uint8_t));
+    uint8_t loginSize = buffer_[1 + initialBlock.size ()];
+    uint8_t passwordSize = buffer_[1 + initialBlock.size () + sizeof (uint8_t)];
 
     uint16_t stringSize = loginSize + passwordSize;
     uint16_t blockCount = stringSize / 8;
@@ -352,7 +352,7 @@ bool Session::TrySendFile ()
     Idea::Block initialBlock;
     std::copy (buffer_.begin () + 1, buffer_.begin () + 1 + initialBlock.size (), initialBlock.begin ());
 
-    uint8_t fileNameSize = *(uint8_t *) &*(buffer_.begin () + 1 + initialBlock.size ());
+    uint8_t fileNameSize = buffer_[1 + initialBlock.size ()];
     std::size_t blockCount = fileNameSize / 8;
 
     if (fileNameSize % 8 > 0)
