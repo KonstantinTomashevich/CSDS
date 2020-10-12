@@ -344,7 +344,7 @@ bool Session::ReadAndValidateAuth ()
 
     BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Received auth request with login \"" << login <<
                              "\" and password \"" + password + "\".";
-    return AuthService::check (login, password, userToken_);
+    return AuthService::check (login, password);
 }
 
 bool Session::TrySendFile ()
@@ -389,12 +389,6 @@ bool Session::TrySendFile ()
     inputFile.seekg (0, inputFile.beg);
 
     Idea::GenerateInitialBlock (initialBlock);
-    for (std::size_t index = 0; index < initialBlock.size (); ++index)
-    {
-        BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Initial block symbol " << index << " is " <<
-                                 (int) initialBlock[index] << ".";
-    }
-
     buffer_[0] = (char) MessageType::STC_FILE;
     std::copy (initialBlock.begin (), initialBlock.end (), buffer_.begin () + 1);
     *(std::size_t *) &buffer_[1 + initialBlock.size ()] = fileLength;

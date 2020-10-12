@@ -82,8 +82,8 @@ int main (int argc, char *argv[])
             }
         }
 
-        std::string login = "TestLogin";
-        std::string password = "qwerty_1234567890!lf";
+        std::string login = "testlogin";
+        std::string password = "testpassword";
 
         BOOST_LOG_TRIVIAL (info) << "Sending auth info...";
         {
@@ -158,12 +158,6 @@ int main (int argc, char *argv[])
                                          (uint8_t) MessageType::STC_AUTH_SUCCESSFUL <<
                                          ", but received " << buffer[0] << ".";
                 return 1;
-            }
-
-            for (std::size_t index = 0; index < initialBlock.size (); ++index)
-            {
-                BOOST_LOG_TRIVIAL(debug) << "Initial block symbol " << index << " is " <<
-                                         (int) initialBlock[index] << ".";
             }
 
             std::size_t blocksLeft = fileSize / Idea::BLOCK_SIZE;

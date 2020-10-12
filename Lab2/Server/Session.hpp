@@ -34,6 +34,4 @@ private:
     RSA::PublicKey rsaPublicKey_;
     Idea::Key currentSessionKey_;
     std::array <uint8_t, 1024> buffer_;
-
-    std::size_t userToken_ = 0;
 };
