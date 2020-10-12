@@ -3,7 +3,6 @@
 
 #include <fstream>
 #include <unordered_map>
-#include <bit>
 #include <boost/log/trivial.hpp>
 
 namespace std
