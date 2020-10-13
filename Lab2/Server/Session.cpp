@@ -19,7 +19,7 @@ const char *VALIDATING_AUTH = "ValidatingAuth";
 
 const char *WAITING_FOR_QUERIES = "WaitingForQueries";
 
-const char *SENDING_FILE = "SENDING_FILE";
+const char *SENDING_FILE = "SendingFile";
 }
 
 Session::Session (boost::asio::io_context &ioContext)
