@@ -141,7 +141,7 @@ FileInfo* Controller::loadFile(QString filename)
     // receive file
     try {
         boost::asio::read (*_serverSocket,
-                            boost::asio::buffer(buffer, 1 + Idea::BLOCK_SIZE + sizeof (std::size_t)),
+                            boost::asio::buffer(buffer, 1 + Idea::BLOCK_SIZE + 4),
                             boost::asio::transfer_all ());
 
         Idea::Block initialBlock;
@@ -151,9 +151,9 @@ FileInfo* Controller::loadFile(QString filename)
         if (buffer[0] != (uint8_t) MessageType::STC_FILE)
         {
             std::stringstream message;
-            message << "Expected message with code " <<
-                 (uint8_t) MessageType::STC_AUTH_SUCCESSFUL <<
-                 ", but received " << buffer[0] << ".";
+            message << "Unexpected protocol message type. Expected: " <<
+                 (unsigned int) MessageType::STC_FILE <<
+                 ", but received " << (unsigned int) buffer[0];
             throw std::runtime_error(message.str());
         }
 
@@ -184,7 +184,12 @@ FileInfo* Controller::loadFile(QString filename)
             else
                 blocksLeft = 0;
         }
-        return new FileInfo(parent(), filename, QString::fromStdString(text.str()));
+        std::string strText = text.str();
+        for (char& c : strText)
+            if (c > 127)
+                c = '?';
+        std::cout << strText << std::endl;
+        return new FileInfo(parent(), filename, QString::fromStdString(strText));
     } catch (std::exception& e) {
         return new FileInfo(parent(), e.what());
     }

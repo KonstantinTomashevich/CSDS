@@ -92,6 +92,7 @@ Window {
             id: fileViewerObj
             Component.onCompleted: {
                 fileViewerObj.setFile(fileName, text)
+                console.log("Text: " + text)
             }
             onBack: {
                 stack.pop()

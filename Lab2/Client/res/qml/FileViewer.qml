@@ -34,9 +34,10 @@ Rectangle {
             bottom: buttonBack.top
             margins: 5
         }
-        Text{
+        Label{
             id: textAreaFileContents
             anchors.fill: parent
+            textFormat: Text.PlainText
             text: "Lorem ipsum"
         }
     }
