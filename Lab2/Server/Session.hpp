@@ -20,7 +20,7 @@ private:
     void Abort ();
     void AbortOnFatalError (const boost::system::error_code &error);
 
-    void AsyncWaitForInput (std::size_t expectedCount = 1);
+    void AsyncWaitForInput (uint32_t expectedCount = 1);
     void GenerateSessionKey ();
     void ReadRSAKey ();
 

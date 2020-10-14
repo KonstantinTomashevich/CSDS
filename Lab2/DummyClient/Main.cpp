@@ -145,12 +145,12 @@ int main (int argc, char *argv[])
         BOOST_LOG_TRIVIAL (info) << "Reading file...";
         {
             boost::asio::read (socket,
-                               boost::asio::buffer (buffer, 1 + Idea::BLOCK_SIZE + sizeof (std::size_t)),
+                               boost::asio::buffer (buffer, 1 + Idea::BLOCK_SIZE + sizeof (uint32_t)),
                                boost::asio::transfer_all ());
 
             Idea::Block initialBlock;
             std::copy (buffer.begin () + 1, buffer.begin () + 1 + Idea::BLOCK_SIZE, initialBlock.begin ());
-            std::size_t fileSize = *(std::size_t *) &buffer[1 + initialBlock.size ()];
+            uint32_t fileSize = *(uint32_t *) &buffer[1 + initialBlock.size ()];
 
             if (buffer[0] != (uint8_t) MessageType::STC_FILE)
             {
@@ -160,16 +160,16 @@ int main (int argc, char *argv[])
                 return 1;
             }
 
-            std::size_t blocksLeft = fileSize / Idea::BLOCK_SIZE;
+            uint32_t blocksLeft = fileSize / Idea::BLOCK_SIZE;
             if (fileSize % Idea::BLOCK_SIZE > 0)
             {
                 ++blocksLeft;
             }
 
-            const std::size_t blocksInChunk = buffer.size () / Idea::BLOCK_SIZE;
+            const uint32_t blocksInChunk = buffer.size () / Idea::BLOCK_SIZE;
             while (blocksLeft > 0)
             {
-                std::size_t blocksToRead = std::min (blocksInChunk, blocksLeft);
+                uint32_t blocksToRead = std::min (blocksInChunk, blocksLeft);
                 boost::asio::read (socket,
                                    boost::asio::buffer (buffer, blocksToRead * Idea::BLOCK_SIZE),
                                    boost::asio::transfer_all ());

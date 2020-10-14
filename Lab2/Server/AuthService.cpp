@@ -9,7 +9,7 @@ namespace std
 {
 template <> struct hash <MD5::Hash>
 {
-    std::size_t operator() (const MD5::Hash &hash) const
+    uint32_t operator() (const MD5::Hash &hash) const
     {
         return std::hash <std::string> () ({(const char *) &hash[0], hash.size ()});
     }
@@ -35,7 +35,7 @@ bool AuthService::check (const std::string &login, const std::string &password)
             MD5::Hash passwordHash;
 
             // Auth hashes file always uses little endian.
-            for (std::size_t index = 0; index < sizeof (hashesCount); ++index)
+            for (uint32_t index = 0; index < sizeof (hashesCount); ++index)
             {
                 if (!hashesFile)
                 {
