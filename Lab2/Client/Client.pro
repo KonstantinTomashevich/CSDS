@@ -14,21 +14,32 @@ RESOURCES += res/qml.qrc
 TRANSLATIONS += \
     res/ts/Client_ru_BY.ts
 
-# Additional import path used to resolve QML modules in Qt Creator's code model
-QML_IMPORT_PATH =
+# shared headers (cryptography)
+INCLUDEPATH += ../
 
-# Additional import path used to resolve QML modules just for Qt Quick Designer
-QML_DESIGNER_IMPORT_PATH =
-
-# Default rules for deployment.
-qnx: target.path = /tmp/$${TARGET}/bin
-else: unix:!android: target.path = /opt/$${TARGET}/bin
-!isEmpty(target.path): INSTALLS += target
-
-ANDROID_ABIS = armeabi-v7a
+LIBS = -L"/home/vladislav/Qt/5.15.1/gcc_64/lib"
+!android: LIBS += -L"/usr/lib/x86_64-linux-gnu" -lboost_system
+!android: LIBS += -L"$$PWD/../cmake-build-debug/Shared" -lShared
 
 HEADERS += \
     src/client/authentication_result.h \
     src/client/controller.h \
     src/client/file_info.h \
     src/client/server_connection_result.h
+
+android {
+    # boost for android
+    INCLUDEPATH += /home/vladislav/Libraries/ndk_21_boost_1.72.0/include
+    LIBS += -L"/home/vladislav/Libraries/ndk_21_boost_1.72.0/libs"
+    # compile as project files
+    SOURCES += $$files(../Shared/*.cpp)
+    HEADERS += $$files(../Shared/*.h)
+    # DEFINES += ANDROID_STL=c++_static
+}
+
+# Default rules for deployment.
+qnx: target.path = /tmp/$${TARGET}/bin
+else: unix:!android: target.path = /opt/$${TARGET}/bin
+!isEmpty(target.path): INSTALLS += target
+
+ANDROID_ABIS = armeabi-v7a arm64-v8a x86

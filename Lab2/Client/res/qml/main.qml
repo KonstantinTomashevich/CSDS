@@ -2,6 +2,7 @@ import QtQuick 2.12
 import QtQuick.Window 2.12
 import QtQuick.Layouts 1.12
 import QtQuick.Controls 2.12
+import QtQuick.Dialogs 1.1
 
 Window {
     width: 640
@@ -19,6 +20,12 @@ Window {
         anchors.fill: parent
     }
 
+    MessageDialog {
+        id: messageDialog
+        title: "May I have your attention please"
+        text: "It's so cool that you are using Qt Quick."
+    }
+
     Component {
         id: serverChooser
         ServerChooser {
@@ -27,8 +34,10 @@ Window {
                 if (connectionResult.isConnected())
                     stack.push(loginForm)
                 else {
-                    // TODO: PRINT ERROR MESSAGE
                     console.log(connectionResult.reason())
+                    messageDialog.title = qsTr("Server connection error");
+                    messageDialog.text = connectionResult.reason();
+                    messageDialog.open()
                 }
             }
         }
@@ -45,8 +54,10 @@ Window {
                 if (authenticationResult.isAuthenticated())
                     stack.push(fileChooser)
                 else {
-                    // TODO: PRINT ERROR MESSAGE
                     console.log(authenticationResult.reason())
+                    messageDialog.title = qsTr("Authentication error");
+                    messageDialog.text = connectionResult.reason();
+                    messageDialog.open()
                 }
             }
         }
@@ -68,7 +79,9 @@ Window {
                 }
                 else {
                     console.log(loadedFile.reason())
-                    // TODO: PRINT ERROR MESSAGE
+                    messageDialog.title = qsTr("File request error");
+                    messageDialog.text = loadedFile.reason();
+                    messageDialog.open()
                 }
             }
         }

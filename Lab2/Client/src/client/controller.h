@@ -1,25 +1,18 @@
 #ifndef CONTROLLER_H
 #define CONTROLLER_H
 
+#include <boost/asio.hpp>
+
 #include "server_connection_result.h"
 #include "authentication_result.h"
 #include "file_info.h"
 
+#include <Shared/RSA.hpp>
+#include <Shared/Idea.hpp>
+
 class Controller : public QObject
 {
     Q_OBJECT
-
-    /**
-     * @brief The Screen enum
-     * Used to reference ui state.
-     */
-    enum class Screen : char {
-        SERVER_CHOOSE = 0,
-        AUTHENTICATE = 1,
-        LOGIN = 2,
-        FILE_CHOOSE = 3,
-        FILE_VIEW = 4
-    };
 
 public:
     explicit Controller(QObject *parent = nullptr);
@@ -31,8 +24,14 @@ public slots:
     Q_INVOKABLE void reset();
 
 private:
-    /// Current ui state
-    Screen _activeScreen;
+    std::unique_ptr<boost::asio::io_context> _ioContext;
+    std::unique_ptr<boost::asio::ip::tcp::socket> _serverSocket;
+    struct {
+        RSA::PublicKey rsaPublicKey;
+        RSA::PrivateKey rsaPrivateKey;
+        Idea::Key currentSessionKey;
+    } _crypto;
+
 };
 
 #endif // CONTROLLER_H
