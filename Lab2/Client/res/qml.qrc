@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>qml/main.qml</file>
+        <file>qml/ServerChooser.qml</file>
+        <file>qml/LoginForm.qml</file>
+        <file>qml/FileChooser.qml</file>
+        <file>qml/FileViewer.qml</file>
+    </qresource>
+</RCC>
