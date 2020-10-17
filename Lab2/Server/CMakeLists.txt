@@ -1,5 +1,6 @@
 find_package(Boost COMPONENTS headers system log REQUIRED)
-add_executable(Server Main.cpp Server.cpp Server.hpp Session.cpp Session.hpp AuthService.cpp AuthService.hpp FileService.cpp FileService.hpp)
+add_executable(Server Main.cpp Server.cpp Server.hpp Session.cpp Session.hpp AuthService.cpp AuthService.hpp
+        FileService.cpp FileService.hpp TimerService.cpp TimerService.hpp)
 target_link_libraries(Server Shared Boost::headers Boost::system Boost::log)
 
 # Ad-hook to link windows socket library. Additional fixes for other compilers and systems required.

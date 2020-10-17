@@ -31,6 +31,7 @@ public:
 
     explicit StateMachine (std::unordered_map <std::string, State> states, std::string initialStateName);
     void Consume (char code);
+    const std::string &GetCurrentStateName () const;
 
 private:
     void ValidateCurrentState () const;

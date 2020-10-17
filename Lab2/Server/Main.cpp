@@ -1,7 +1,9 @@
 #include <iostream>
 #include <boost/asio.hpp>
 #include <boost/log/trivial.hpp>
+
 #include "Server.hpp"
+#include "TimerService.hpp"
 
 int main (int argc, char **argv)
 {
@@ -20,7 +22,8 @@ int main (int argc, char **argv)
         {
             try
             {
-                ioContext.run ();
+                ioContext.poll ();
+                TimerService::Step ();
             }
             catch (std::runtime_error &error)
             {

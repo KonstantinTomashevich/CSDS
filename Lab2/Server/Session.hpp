@@ -27,7 +27,9 @@ private:
     void WriteSessionKey ();
     bool ReadAndValidateAuth ();
     bool TrySendFile ();
+    void StartSessionKeyUpdateTimer ();
 
+    uint32_t asyncWaitByteLimit_ = 0;
     boost::asio::ip::tcp::socket socket_;
     std::unique_ptr <StateMachine> stateMachine_;
 

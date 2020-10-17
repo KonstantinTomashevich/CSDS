@@ -4,5 +4,5 @@
 class AuthService
 {
 public:
-    static bool check(const std::string &login, const std::string &password);
+    static bool Check(const std::string &login, const std::string &password);
 };

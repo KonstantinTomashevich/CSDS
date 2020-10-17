@@ -24,6 +24,11 @@ void StateMachine::Consume (char code)
     }
 }
 
+const std::string &StateMachine::GetCurrentStateName () const
+{
+    return currentStateName_;
+}
+
 void StateMachine::ValidateCurrentState () const
 {
     if (states_.count (currentStateName_) == 0)
