@@ -1,11 +1,14 @@
 #include "Session.hpp"
 #include <boost/random.hpp>
 #include <boost/log/trivial.hpp>
+
+#include <ctime>
 #include <fstream>
 
 #include <Shared/MessageType.hpp>
 #include "AuthService.hpp"
 #include "FileService.hpp"
+#include "TimerService.hpp"
 
 namespace States
 {
@@ -21,6 +24,8 @@ const char *WAITING_FOR_QUERIES = "WaitingForQueries";
 
 const char *SENDING_FILE = "SendingFile";
 }
+
+static const clock_t SESSION_KEY_UPDATE_PERIOD = 20 * CLOCKS_PER_SEC;
 
 Session::Session (boost::asio::io_context &ioContext)
     : socket_ (ioContext)
@@ -134,6 +139,7 @@ void Session::Start ()
                                                     boost::asio::transfer_all (), error);
 
                                 AbortOnFatalError (error);
+                                StartSessionKeyUpdateTimer ();
                                 return States::WAITING_FOR_QUERIES;
                             }
                         },
@@ -171,6 +177,8 @@ void Session::Start ()
                             (char) MessageType::STC_SESSION_KEY,
                             [this] () -> std::string
                             {
+                                GenerateSessionKey ();
+                                WriteSessionKey ();
                                 return States::WAITING_FOR_QUERIES;
                             }
                         },
@@ -228,6 +236,7 @@ void Session::Start ()
 
 void Session::Abort ()
 {
+    TimerService::RemoveAllTimers (this);
     delete this;
 }
 
@@ -243,30 +252,44 @@ void Session::AbortOnFatalError (const boost::system::error_code &error)
 
 void Session::AsyncWaitForInput (uint32_t expectedCount)
 {
-    boost::asio::async_read (socket_, boost::asio::buffer (buffer_), boost::asio::transfer_exactly (expectedCount),
-                             [this] (const boost::system::error_code &error,
-                                     uint32_t bytesTransferred) -> void
-                             {
-                                 AbortOnFatalError (error);
-                                 try
+    if (asyncWaitByteLimit_ == 0)
+    {
+        asyncWaitByteLimit_ = expectedCount;
+        boost::asio::async_read (socket_, boost::asio::buffer (buffer_),
+                                 boost::asio::transfer_exactly (expectedCount),
+                                 [this] (const boost::system::error_code &error,
+                                         uint32_t bytesTransferred) -> void
                                  {
-                                     stateMachine_->Consume (buffer_[0]);
-                                 }
-                                 catch (StateMachine::UnsupportedCodeException &exception)
-                                 {
-                                     // TODO: Better exception logging.
-                                     BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Caught exception " <<
-                                                              exception.what () << ", aborting...";
-                                     Abort ();
-                                 }
-                                 catch (StateMachine::StateNotExistsException &exception)
-                                 {
-                                     // TODO: Better exception logging.
-                                     BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Caught exception " <<
-                                                              exception.what () << ", aborting...";
-                                     Abort ();
-                                 }
-                             });
+                                     AbortOnFatalError (error);
+                                     asyncWaitByteLimit_ = 0;
+
+                                     try
+                                     {
+                                         stateMachine_->Consume (buffer_[0]);
+                                     }
+                                     catch (StateMachine::UnsupportedCodeException &exception)
+                                     {
+                                         // TODO: Better exception logging.
+                                         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Caught exception " <<
+                                                                  exception.what () << ", aborting...";
+                                         Abort ();
+                                     }
+                                     catch (StateMachine::StateNotExistsException &exception)
+                                     {
+                                         // TODO: Better exception logging.
+                                         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Caught exception " <<
+                                                                  exception.what () << ", aborting...";
+                                         Abort ();
+                                     }
+                                 });
+    }
+    else if (asyncWaitByteLimit_ != expectedCount)
+    {
+        BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Already waited for " << asyncWaitByteLimit_ <<
+                                 " bytes, but received async wait request for " << expectedCount << " bytes!";
+        Abort ();
+        throw std::runtime_error ("Session aborted!");
+    }
 }
 
 void Session::GenerateSessionKey ()
@@ -344,7 +367,7 @@ bool Session::ReadAndValidateAuth ()
 
     BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Received auth request with login \"" << login <<
                              "\" and password \"" + password + "\".";
-    return AuthService::check (login, password);
+    return AuthService::Check (login, password);
 }
 
 bool Session::TrySendFile ()
@@ -375,7 +398,7 @@ bool Session::TrySendFile ()
     std::string fileName = fileNameBuffer.str ().substr (0, fileNameSize);
     BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Received request for file \"" << fileName << "\".";
 
-    std::ifstream inputFile = FileService::resolve (fileName);
+    std::ifstream inputFile = FileService::Resolve (fileName);
     if (!inputFile)
     {
         BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Unable to process request for file \"" <<
@@ -426,4 +449,22 @@ bool Session::TrySendFile ()
 
     BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: File \"" << fileName << "\" sent!";
     return true;
+}
+
+void Session::StartSessionKeyUpdateTimer ()
+{
+    TimerService::AddTimer ({this, clock () + SESSION_KEY_UPDATE_PERIOD,
+                             [this] () -> bool
+                             {
+                                 if (stateMachine_->GetCurrentStateName () == States::WAITING_FOR_QUERIES)
+                                 {
+                                     stateMachine_->Consume ((char) MessageType::STC_SESSION_KEY);
+                                     StartSessionKeyUpdateTimer ();
+                                     return true;
+                                 }
+                                 else
+                                 {
+                                     return false;
+                                 }
+                             }});
 }

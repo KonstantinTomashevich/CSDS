@@ -1,6 +1,6 @@
 #include "FileService.hpp"
 
-std::ifstream FileService::resolve (const std::string &fileName)
+std::ifstream FileService::Resolve (const std::string &fileName)
 {
     if (fileName.find ("..") != std::string::npos)
     {

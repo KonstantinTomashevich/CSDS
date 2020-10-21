@@ -4,5 +4,5 @@
 class FileService final
 {
 public:
-    static std::ifstream resolve (const std::string &fileName);
+    static std::ifstream Resolve (const std::string &fileName);
 };

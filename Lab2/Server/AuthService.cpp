@@ -21,7 +21,7 @@ namespace
 std::unordered_map <MD5::Hash, MD5::Hash> loginPasswordHashes {};
 }
 
-bool AuthService::check (const std::string &login, const std::string &password)
+bool AuthService::Check (const std::string &login, const std::string &password)
 {
     if (loginPasswordHashes.empty ())
     {
