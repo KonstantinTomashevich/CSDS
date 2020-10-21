@@ -3,7 +3,7 @@
 #include <boost/asio.hpp>
 
 #include <Shared/StateMachine.hpp>
-#include <Shared/RSA.hpp>
+#include <Shared/GM.hpp>
 #include <Shared/Idea.hpp>
 
 class Session final
@@ -22,7 +22,7 @@ private:
 
     void AsyncWaitForInput (uint32_t expectedCount = 1);
     void GenerateSessionKey ();
-    void ReadRSAKey ();
+    void ReadGMKey ();
 
     void WriteSessionKey ();
     bool ReadAndValidateAuth ();
@@ -33,7 +33,7 @@ private:
     boost::asio::ip::tcp::socket socket_;
     std::unique_ptr <StateMachine> stateMachine_;
 
-    RSA::PublicKey rsaPublicKey_;
+    GM::PublicKey gmPublicKey_;
     Idea::Key currentSessionKey_;
     std::array <uint8_t, 1024> buffer_;
 };

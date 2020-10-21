@@ -55,15 +55,15 @@ void Session::Start ()
                     {
                         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Entered state " <<
                                                  States::INITIAL << "!";
-                        AsyncWaitForInput (1 + RSA::PublicKey::N_SIZE + RSA::PublicKey::E_SIZE);
+                        AsyncWaitForInput (1 + GM::KEY_CHUNK_SIZE_IN_BYTES * 2);
                         return {};
                     },
                     {
                         {
-                            (char) MessageType::CTS_RSA_KEY,
+                            (char) MessageType::CTS_GM_KEY,
                             [this] () -> std::string
                             {
-                                ReadRSAKey ();
+                                ReadGMKey ();
                                 return States::SESSION_KEY_GENERATION;
                             }
                         }
@@ -201,7 +201,8 @@ void Session::Start ()
                     {
                         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Entered state " <<
                                                  States::SENDING_FILE << "!";
-                        return (char) (TrySendFile () ? MessageType::STC_FILE : MessageType::STC_UNABLE_TO_SEND_FILE);
+                        return (char) (TrySendFile () ? MessageType::STC_FILE
+                                                      : MessageType::STC_UNABLE_TO_SEND_FILE);
                     },
                     {
                         {
@@ -282,8 +283,7 @@ void Session::AsyncWaitForInput (uint32_t expectedCount)
                                          Abort ();
                                      }
                                  });
-    }
-    else if (asyncWaitByteLimit_ != expectedCount)
+    } else if (asyncWaitByteLimit_ != expectedCount)
     {
         BOOST_LOG_TRIVIAL (info) << "Session [" << this << "]: Already waited for " << asyncWaitByteLimit_ <<
                                  " bytes, but received async wait request for " << expectedCount << " bytes!";
@@ -296,7 +296,7 @@ void Session::GenerateSessionKey ()
 {
     boost::random::mt11213b base_gen (clock ());
     boost::random::independent_bits_engine <boost::random::mt11213b,
-                                            Idea::KEY_SIZE * 8, boost::multiprecision::uint128_t> gen (base_gen);
+        Idea::KEY_SIZE * 8, boost::multiprecision::uint128_t> gen (base_gen);
 
     boost::multiprecision::uint128_t sessionKey = gen ();
     boost::multiprecision::export_bits (sessionKey, currentSessionKey_.begin (), 8);
@@ -304,35 +304,38 @@ void Session::GenerateSessionKey ()
     BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Generated session key " << sessionKey << ".";
 }
 
-void Session::ReadRSAKey ()
+void Session::ReadGMKey ()
 {
     auto nStart = buffer_.begin () + 1;
-    auto nEnd = nStart + RSA::PublicKey::N_SIZE;
+    auto nEnd = nStart + GM::KEY_CHUNK_SIZE_IN_BYTES;
     auto eStart = nEnd;
-    auto eEnd = eStart + RSA::PublicKey::E_SIZE;
+    auto eEnd = eStart + GM::KEY_CHUNK_SIZE_IN_BYTES;
 
-    boost::multiprecision::import_bits (rsaPublicKey_.n, nStart, nEnd);
-    boost::multiprecision::import_bits (rsaPublicKey_.e, eStart, eEnd);
+    boost::multiprecision::import_bits (gmPublicKey_.n, nStart, nEnd);
+    boost::multiprecision::import_bits (gmPublicKey_.y, eStart, eEnd);
 
-    BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Received RSA public key: n = " << rsaPublicKey_.n <<
-                             ", e = " << rsaPublicKey_.e << ".";
+    BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Received GM public key: n = " << gmPublicKey_.n <<
+                             ", e = " << gmPublicKey_.y << ".";
 }
 
 void Session::WriteSessionKey ()
 {
     buffer_[0] = (uint8_t) MessageType::STC_SESSION_KEY;
-    boost::multiprecision::int256_t sessionKey;
+    boost::system::error_code error;
+    boost::asio::write (socket_, boost::asio::buffer (buffer_, 1), boost::asio::transfer_all (), error);
+    AbortOnFatalError (error);
+
+    boost::multiprecision::uint256_t sessionKey;
     boost::multiprecision::import_bits (sessionKey, currentSessionKey_.begin (), currentSessionKey_.end ());
 
-    RSA::Encode (rsaPublicKey_, sessionKey);
-    boost::multiprecision::export_bits (sessionKey, buffer_.begin () + 1, 8);
-
-    boost::system::error_code error;
-    boost::asio::write (socket_, boost::asio::buffer (buffer_, 1 + RSA::MESSAGE_SIZE),
-                        boost::asio::transfer_all (), error);
-
-    AbortOnFatalError (error);
-    BOOST_LOG_TRIVIAL(debug) << "Session [" << this << "]: Encoded session key sent: " << sessionKey << "!";
+    std::vector <boost::multiprecision::uint256_t> encodedKey = GM::Encode (gmPublicKey_, sessionKey);
+    for (const boost::multiprecision::uint256_t &partition : encodedKey)
+    {
+        boost::multiprecision::export_bits (partition, buffer_.begin (), 8);
+        boost::asio::write (socket_, boost::asio::buffer (buffer_, GM::ENCODED_CHUNK_SIZE),
+                            boost::asio::transfer_all (), error);
+        AbortOnFatalError (error);
+    }
 }
 
 bool Session::ReadAndValidateAuth ()
@@ -461,8 +464,7 @@ void Session::StartSessionKeyUpdateTimer ()
                                      stateMachine_->Consume ((char) MessageType::STC_SESSION_KEY);
                                      StartSessionKeyUpdateTimer ();
                                      return true;
-                                 }
-                                 else
+                                 } else
                                  {
                                      return false;
                                  }

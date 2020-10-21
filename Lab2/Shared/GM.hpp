@@ -10,6 +10,8 @@
 namespace GM {
 static constexpr uint16_t MODULUS_SIZE_BITS = 256;
 static constexpr uint16_t KEY_PART_SIZE_BITS = MODULUS_SIZE_BITS / 2;
+static constexpr uint16_t KEY_CHUNK_SIZE_IN_BYTES = MODULUS_SIZE_BITS / 8;
+static constexpr uint16_t ENCODED_CHUNK_SIZE = MODULUS_SIZE_BITS / 8;
 
 struct PrivateKey {
   boost::multiprecision::uint256_t p;

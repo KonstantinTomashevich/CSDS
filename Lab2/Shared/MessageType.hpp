@@ -8,7 +8,7 @@ enum class MessageType : char
     STC_AUTH_SUCCESSFUL,
     STC_AUTH_FAILED,
 
-    CTS_RSA_KEY,
+    CTS_GM_KEY,
     CTS_FILE_REQUEST,
     CTS_AUTH_REQUEST
 };

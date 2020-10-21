@@ -2,16 +2,16 @@
 #include <boost/asio.hpp>
 #include <boost/log/trivial.hpp>
 
-#include <Shared/RSA.hpp>
+#include <Shared/GM.hpp>
 #include <Shared/Idea.hpp>
 #include <Shared/MessageType.hpp>
 #include <Shared/Idea.hpp>
 
 static int ReadSessionKey (boost::asio::ip::tcp::socket &socket, std::array <uint8_t, 1024> &buffer,
-                           const RSA::PrivateKey &rsaPrivateKey, Idea::Key &currentSessionKey)
+                           const GM::PrivateKey &gmPrivateKey, Idea::Key &currentSessionKey)
 {
     BOOST_LOG_TRIVIAL (info) << "Waiting for session key...";
-    boost::asio::read (socket, boost::asio::buffer (buffer, 1 + RSA::MESSAGE_SIZE),
+    boost::asio::read (socket, boost::asio::buffer (buffer, 1),
                        boost::asio::transfer_all ());
 
     if (buffer[0] != (uint8_t) MessageType::STC_SESSION_KEY)
@@ -21,20 +21,24 @@ static int ReadSessionKey (boost::asio::ip::tcp::socket &socket, std::array <uin
         return 1;
     }
 
-    boost::multiprecision::int256_t sessionKey;
-    boost::multiprecision::import_bits (sessionKey, buffer.begin () + 1,
-                                        buffer.begin () + 1 + RSA::MESSAGE_SIZE);
-    BOOST_LOG_TRIVIAL (debug) << "Received encoded session key: " << sessionKey << ".";
+    std::vector <boost::multiprecision::uint256_t> parts;
+    for (unsigned int index = 0; index < 256; ++index)
+    {
+        boost::asio::read (socket, boost::asio::buffer (buffer, GM::ENCODED_CHUNK_SIZE), boost::asio::transfer_all ());
+        boost::multiprecision::int256_t part;
+        boost::multiprecision::import_bits (part, buffer.begin (), buffer.begin () + GM::ENCODED_CHUNK_SIZE);
+        parts.emplace_back (part);
+    }
 
-    RSA::Decode (rsaPrivateKey, sessionKey);
+    boost::multiprecision::int256_t sessionKey = GM::Decode (gmPrivateKey, parts);
     BOOST_LOG_TRIVIAL (debug) << "Decoded session key: " << sessionKey << ".";
 
     // Clean buffer, so we'll be able to check if decoded session key size is really 128 bits.
     buffer.fill (0);
-    boost::multiprecision::export_bits (sessionKey, buffer.begin () + 1, 8);
-    std::copy (buffer.begin () + 1, buffer.begin () + 1 + RSA::MESSAGE_SIZE / 2, currentSessionKey.begin ());
+    boost::multiprecision::export_bits (sessionKey, buffer.begin (), 8);
+    std::copy (buffer.begin (), buffer.begin () + GM::ENCODED_CHUNK_SIZE / 2, currentSessionKey.begin ());
 
-    for (int index = RSA::MESSAGE_SIZE / 2; index < RSA::MESSAGE_SIZE; ++index)
+    for (int index = GM::ENCODED_CHUNK_SIZE / 2; index < GM::ENCODED_CHUNK_SIZE; ++index)
     {
         if (buffer[index + 1] > 0)
         {
@@ -66,28 +70,28 @@ int main (int argc, char *argv[])
 
         BOOST_LOG_TRIVIAL (info) << "Connected to server!";
 
-        RSA::PublicKey rsaPublicKey;
-        RSA::PrivateKey rsaPrivateKey;
+        GM::PublicKey gmPublicKey;
+        GM::PrivateKey gmPrivateKey;
         Idea::Key currentSessionKey;
         std::array <uint8_t, 1024> buffer;
 
-        BOOST_LOG_TRIVIAL (info) << "Initializing and sending public RSA key...";
+        BOOST_LOG_TRIVIAL (info) << "Initializing and sending public GM key...";
         {
-            RSA::GenerateKeys (rsaPublicKey, rsaPrivateKey);
-            BOOST_LOG_TRIVIAL (debug) << "Generated RSA public key: n = " << rsaPublicKey.n <<
-                                      ", e = " << rsaPublicKey.e << ".";
+            GM::GenerateKeys (gmPublicKey, gmPrivateKey);
+            BOOST_LOG_TRIVIAL (debug) << "Generated GM public key: n = " << gmPublicKey.n <<
+                                      ", e = " << gmPublicKey.y << ".";
 
-            buffer[0] = (uint8_t) MessageType::CTS_RSA_KEY;
+            buffer[0] = (uint8_t) MessageType::CTS_GM_KEY;
 
-            boost::multiprecision::export_bits (rsaPublicKey.n, buffer.begin () + 1, 8);
-            boost::multiprecision::export_bits (rsaPublicKey.e, buffer.begin () + 1 + RSA::PublicKey::N_SIZE, 8);
+            boost::multiprecision::export_bits (gmPublicKey.n, buffer.begin () + 1, 8);
+            boost::multiprecision::export_bits (gmPublicKey.y, buffer.begin () + 1 + GM::KEY_CHUNK_SIZE_IN_BYTES, 8);
             boost::asio::write (socket,
-                                boost::asio::buffer (buffer, 1 + RSA::PublicKey::N_SIZE + RSA::PublicKey::E_SIZE),
+                                boost::asio::buffer (buffer, 1 + GM::KEY_CHUNK_SIZE_IN_BYTES * 2),
                                 boost::asio::transfer_all ());
         }
 
         {
-            int readSessionKeyResult = ReadSessionKey (socket, buffer, rsaPrivateKey, currentSessionKey);
+            int readSessionKeyResult = ReadSessionKey (socket, buffer, gmPrivateKey, currentSessionKey);
             if (readSessionKeyResult != 0)
             {
                 return readSessionKeyResult;
@@ -197,15 +201,15 @@ int main (int argc, char *argv[])
 
                     initialBlock = Idea::DecodeCBC (
                         initialBlock, currentSessionKey,
-                        Idea::ByteIteratorProducer (buffer.begin (), buffer.begin () + blocksToRead * Idea::BLOCK_SIZE),
+                        Idea::ByteIteratorProducer (buffer.begin (),
+                                                    buffer.begin () + blocksToRead * Idea::BLOCK_SIZE),
                         Idea::StreamConsumer (decodedStream));
 
                     std::cout << decodedBuffer.str ();
                     if (blocksLeft > blocksInChunk)
                     {
                         blocksLeft -= blocksInChunk;
-                    }
-                    else
+                    } else
                     {
                         blocksLeft = 0;
                     }
@@ -214,7 +218,7 @@ int main (int argc, char *argv[])
 
             if (index != requestsCount - 1)
             {
-                int readSessionKeyResult = ReadSessionKey (socket, buffer, rsaPrivateKey, currentSessionKey);
+                int readSessionKeyResult = ReadSessionKey (socket, buffer, gmPrivateKey, currentSessionKey);
                 if (readSessionKeyResult != 0)
                 {
                     return readSessionKeyResult;
