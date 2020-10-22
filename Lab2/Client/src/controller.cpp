@@ -2,6 +2,7 @@
 #include <Shared/MessageType.hpp>
 #include <iostream>
 #include <sstream>
+#include <QDebug>
 
 Controller::Controller(QObject *parent) : QObject(parent)
 {
@@ -140,33 +141,38 @@ FileInfo* Controller::loadFile(QString filename)
 
     // receive file
     try {
-        boost::asio::read (*_serverSocket,
-                            boost::asio::buffer(buffer, 1 + Idea::BLOCK_SIZE + 4),
-                            boost::asio::transfer_all ());
+        // read message type
+        boost::asio::read (*_serverSocket, boost::asio::buffer(buffer, 1), boost::asio::transfer_all ());
 
-        Idea::Block initialBlock;
-        std::copy (buffer.begin () + 1, buffer.begin () + 1 + Idea::BLOCK_SIZE, initialBlock.begin ());
-        std::size_t fileSize = *(std::size_t *) &buffer[1 + initialBlock.size ()];
-
-        if (buffer[0] != (uint8_t) MessageType::STC_FILE)
-        {
+        // validate message type
+        if (buffer[0] != (uint8_t) MessageType::STC_FILE) {
             std::stringstream message;
             message << "Unexpected protocol message type. Expected: " <<
-                 (unsigned int) MessageType::STC_FILE <<
-                 ", but received " << (unsigned int) buffer[0];
+                 (unsigned int) MessageType::STC_FILE << ", but received " << (unsigned int) buffer[0];
             throw std::runtime_error(message.str());
         }
 
-        std::size_t blocksLeft = fileSize / Idea::BLOCK_SIZE;
+        // read filesize
+        boost::asio::read (*_serverSocket,
+                            boost::asio::buffer(buffer.begin() + 1, Idea::BLOCK_SIZE + 4),
+                            boost::asio::transfer_all ());
+
+        Idea::Block initialBlock;
+        std::copy (buffer.begin() + 1, buffer.begin() + 1 + Idea::BLOCK_SIZE, initialBlock.begin());
+        std::uint32_t fileSize = *(std::uint32_t *)&buffer[1 + initialBlock.size()];
+
+        qDebug() << "Filesize: " << fileSize << " bytes";
+
+        std::uint32_t blocksLeft = fileSize / Idea::BLOCK_SIZE;
         if (fileSize % Idea::BLOCK_SIZE > 0)
             ++blocksLeft;
 
-        const std::size_t blocksInChunk = buffer.size () / Idea::BLOCK_SIZE;
+        const std::uint32_t blocksInChunk = buffer.size () / Idea::BLOCK_SIZE;
 
         std::stringstream text;
         while (blocksLeft > 0)
         {
-            std::size_t blocksToRead = std::min (blocksInChunk, blocksLeft);
+            std::uint32_t blocksToRead = std::min (blocksInChunk, blocksLeft);
             boost::asio::read (*_serverSocket,
                boost::asio::buffer (buffer, blocksToRead * Idea::BLOCK_SIZE),
                boost::asio::transfer_all ());
