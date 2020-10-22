@@ -4,6 +4,25 @@
 #include <sstream>
 #include <QDebug>
 
+Idea::Key ReadSessionKey(boost::asio::ip::tcp::socket& socket, RSA::PrivateKey& key) {
+    std::array <uint8_t, 1024> buffer;
+    boost::asio::read(socket, boost::asio::buffer (buffer, RSA::MESSAGE_SIZE), boost::asio::transfer_all());
+
+    boost::multiprecision::int256_t sessionKey;
+    boost::multiprecision::import_bits (sessionKey, buffer.begin (), buffer.begin () + RSA::MESSAGE_SIZE);
+
+    RSA::Decode(key, sessionKey);
+    Idea::Key result;
+
+
+    // Clean buffer, so we'll be able to check if decoded session key size is really 128 bits.
+    buffer.fill(0);
+    boost::multiprecision::export_bits(sessionKey, buffer.begin (), 8);
+    std::copy(buffer.begin (), buffer.begin () + RSA::MESSAGE_SIZE / 2, result.begin());
+
+    return result;
+}
+
 Controller::Controller(QObject *parent) : QObject(parent)
 {
     _ioContext = std::make_unique<boost::asio::io_context>();
@@ -40,27 +59,13 @@ ServerConnectionResult* Controller::connectToServer(QString address, QString por
 
     // receive session key
     try {
-        std::array <uint8_t, 1024> buffer;
-        boost::asio::read(*_serverSocket, boost::asio::buffer (buffer, 1 + RSA::MESSAGE_SIZE),
-                           boost::asio::transfer_all());
+        std::array <uint8_t, 1> buffer;
+        boost::asio::read(*_serverSocket, boost::asio::buffer(buffer, 1), boost::asio::transfer_all());
 
         if (buffer[0] != (uint8_t) MessageType::STC_SESSION_KEY)
             throw std::runtime_error("Received message has unexpected type.");
 
-        boost::multiprecision::int256_t sessionKey;
-        boost::multiprecision::import_bits (sessionKey, buffer.begin () + 1,
-                                         buffer.begin () + 1 + RSA::MESSAGE_SIZE);
-
-        RSA::Decode(_crypto.rsaPrivateKey, sessionKey);
-
-        // Clean buffer, so we'll be able to check if decoded session key size is really 128 bits.
-        buffer.fill(0);
-        boost::multiprecision::export_bits(sessionKey, buffer.begin () + 1, 8);
-        std::copy(buffer.begin () + 1, buffer.begin () + 1 + RSA::MESSAGE_SIZE / 2, _crypto.currentSessionKey.begin());
-
-        for (int index = RSA::MESSAGE_SIZE / 2; index < RSA::MESSAGE_SIZE; ++index)
-            if (buffer[index + 1] > 0)
-                throw std::runtime_error("Unable to downcast decoded session key to 128 bits!");
+       _crypto.currentSessionKey = ReadSessionKey(*_serverSocket, _crypto.rsaPrivateKey);
     }  catch (std::exception& e) {
         QString message = QString("Could not receive session key: ") + e.what() + '.';
         return new ServerConnectionResult(parent(), address, port, false, message);
@@ -141,16 +146,27 @@ FileInfo* Controller::loadFile(QString filename)
 
     // receive file
     try {
-        // read message type
-        boost::asio::read (*_serverSocket, boost::asio::buffer(buffer, 1), boost::asio::transfer_all ());
 
-        // validate message type
-        if (buffer[0] != (uint8_t) MessageType::STC_FILE) {
+        for (;;) {
+            boost::asio::read (*_serverSocket, boost::asio::buffer(buffer, 1), boost::asio::transfer_all ());
+
+            if (buffer[0] == (uint8_t) MessageType::STC_FILE)
+                break;
+
+            if (buffer[0] == (uint8_t) MessageType::STC_UNABLE_TO_SEND_FILE)
+                throw std::runtime_error("Unable to send file. Maybe file not found.");
+
+            if (buffer[0] == (uint8_t)MessageType::STC_SESSION_KEY) {
+                _crypto.currentSessionKey = ReadSessionKey(*_serverSocket, _crypto.rsaPrivateKey);
+                continue;
+            }
+
             std::stringstream message;
             message << "Unexpected protocol message type. Expected: " <<
                  (unsigned int) MessageType::STC_FILE << ", but received " << (unsigned int) buffer[0];
             throw std::runtime_error(message.str());
         }
+
 
         // read filesize
         boost::asio::read (*_serverSocket,
