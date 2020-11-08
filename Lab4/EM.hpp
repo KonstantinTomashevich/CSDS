@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 namespace EM
 {
@@ -40,7 +41,7 @@ public:
         void UpdateCurrentY ();
 
         uint64_t currentX_;
-        uint64_t currentY_;
+        std::optional<uint64_t> currentY_;
         const Config &config_;
     };
 

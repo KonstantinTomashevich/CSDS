@@ -144,7 +144,7 @@ int64_t ExpMod (int64_t x, int64_t b, int64_t n)
 }
 
 
-int64_t SquareRootMod (int64_t a, int64_t p)
+std::optional <int64_t> SquareRootMod (int64_t a, int64_t p)
 {
     int64_t ai;
     int64_t b;
@@ -158,7 +158,7 @@ int64_t SquareRootMod (int64_t a, int64_t p)
 
     if (Jacobi (a, p) == -1)
     {
-        return 0;
+        return {};
     }
 
     do
@@ -194,10 +194,10 @@ int64_t SquareRootMod (int64_t a, int64_t p)
         c = c * c % p;
     }
 
-    return r;
+    return {r};
 }
 
-uint64_t SquareRootModulus (uint64_t argument, uint64_t modulus)
+std::optional <uint64_t> SquareRootModulus (uint64_t argument, uint64_t modulus)
 {
     return SquareRootMod (argument, modulus);
 }

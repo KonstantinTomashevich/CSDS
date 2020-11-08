@@ -30,7 +30,7 @@ EllipticGroup::ValuesIterator::ValuesIterator (const EllipticGroup::Config &conf
     while (currentX_ < config_.M_)
     {
         UpdateCurrentY ();
-        if (currentY_ > 0)
+        if (currentY_.has_value ())
         {
             break;
         }
@@ -48,13 +48,13 @@ EllipticGroup::ValuesIterator &EllipticGroup::ValuesIterator::operator ++ ()
         ++currentX_;
         UpdateCurrentY ();
     }
-    while (currentX_ < config_.M_ && currentY_ <= 0);
+    while (currentX_ < config_.M_ && !currentY_.has_value ());
     return *this;
 }
 
 EllipticGroup::Value EllipticGroup::ValuesIterator::operator * () const
 {
-    return {currentX_, currentY_};
+    return {currentX_, currentY_.value ()};
 }
 
 void EllipticGroup::ValuesIterator::UpdateCurrentY ()
@@ -67,7 +67,7 @@ void EllipticGroup::ValuesIterator::UpdateCurrentY ()
     }
     else
     {
-        currentY_ = 0;
+        currentY_ = {};
     }
 }
 

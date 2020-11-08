@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 namespace MathUtils
 {
@@ -16,5 +17,5 @@ inline uint64_t IntPower <0> (uint64_t arg)
     return 1;
 }
 
-uint64_t SquareRootModulus (uint64_t argument, uint64_t modulus);
+std::optional<uint64_t> SquareRootModulus (uint64_t argument, uint64_t modulus);
 }
