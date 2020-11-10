@@ -28,7 +28,20 @@ inline int64_t Modulo (int64_t arg, int64_t modulo)
     return arg;
 }
 
-bool BruteForceIsPrime(uint64_t arg);
+bool BruteForceIsPrime (uint64_t arg);
 
-std::optional<uint64_t> SquareRootModulus (uint64_t argument, uint64_t modulus);
+std::optional <uint64_t> SquareRootModulus (uint64_t argument, uint64_t modulus);
+
+class Random final
+{
+public:
+    static Random &Get ();
+
+    uint64_t Next () const;
+
+private:
+    Random ();
+
+    static Random instance_;
+};
 }

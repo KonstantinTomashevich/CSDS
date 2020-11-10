@@ -68,17 +68,17 @@ public:
 
     const Config &GetConfig () const;
 
-    std::optional<Value> PickRandomG (uint64_t minOrder) const;
+    std::optional<Value> PickRandomG (uint64_t &maxOrder) const;
 
-    Value AddPoints(const Value &first, const Value &second) const;
+    std::optional<EllipticGroup::Value> AddPoints(const Value &first, const Value &second) const;
 
-    Value MultiplyPoint(uint64_t times, const Value &point) const;
+    std::optional<EllipticGroup::Value> MultiplyPoint(uint64_t times, const Value &point) const;
 
     int64_t Negate(int64_t arg) const;
 
     Value Negate(const Value &arg) const;
 
-    PrivateKey GeneratePrivateKey ();
+    PrivateKey GeneratePrivateKey (uint64_t order);
 
     PublicKey AssemblePublicKey (const PrivateKey &privateKey, const Value &g);
 
