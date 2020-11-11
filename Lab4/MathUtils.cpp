@@ -24,7 +24,7 @@ bool BruteForceIsPrime (uint64_t arg)
 std::optional <uint64_t> SquareRootModulus (uint64_t argument, uint64_t modulus)
 {
     argument = argument % modulus;
-    for (uint64_t result = 1; result < modulus; ++result)
+    for (uint64_t result = 1; result <= modulus / 2; ++result)
     {
         if ((result * result) % modulus == argument)
         {
@@ -33,6 +33,36 @@ std::optional <uint64_t> SquareRootModulus (uint64_t argument, uint64_t modulus)
     }
 
     return {};
+}
+
+void GetPrimesUntil (uint64_t barrier, std::vector <uint64_t> &output)
+{
+    output.clear ();
+    if (barrier > 2)
+    {
+        output.emplace_back (2);
+    }
+
+    uint64_t iterator = 3;
+    while (iterator < barrier)
+    {
+        bool prime = true;
+        for (uint64_t previous : output)
+        {
+            if (iterator % previous == 0)
+            {
+                prime = false;
+                break;
+            }
+        }
+
+        if (prime)
+        {
+            output.emplace_back (iterator);
+        }
+
+        iterator += 2;
+    }
 }
 
 Random &Random::Get ()

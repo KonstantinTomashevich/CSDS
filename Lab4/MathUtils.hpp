@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace MathUtils
 {
@@ -31,6 +32,8 @@ inline int64_t Modulo (int64_t arg, int64_t modulo)
 bool BruteForceIsPrime (uint64_t arg);
 
 std::optional <uint64_t> SquareRootModulus (uint64_t argument, uint64_t modulus);
+
+void GetPrimesUntil (uint64_t barrier, std::vector <uint64_t> &output);
 
 class Random final
 {

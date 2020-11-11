@@ -34,8 +34,16 @@ int main (int argc, char **argv)
     }
 
 #define TEST_COUNT 1000
-    uint64_t successes = 0;
-    uint64_t fails = 0;
+#define MIN_ORDER_FOR_OK_GROUP 11
+
+    uint64_t exchangeSuccesses = 0;
+    uint64_t exchangeFails = 0;
+    uint64_t exchangeMathFails = 0;
+
+    uint64_t signatureSuccesses = 0;
+    uint64_t signatureFails = 0;
+    uint64_t signatureNotCalculatedFails = 0;
+    uint64_t signatureMathFails = 0;
 
     for (uint64_t index = 0; index < TEST_COUNT; ++index)
     {
@@ -59,54 +67,100 @@ int main (int argc, char **argv)
         if (!g.has_value ())
         {
             std::cout << "Unable to pick G!" << std::endl;
+            ++exchangeMathFails;
             continue;
         }
 
         std::cout << "G: (" << g.value ().x_ << ", " << g.value ().y_ << ")." << std::endl;
-        std::cout << "Order:" << order << "." << std::endl;
+        std::cout << "Order: " << order << "." << std::endl;
+
+        if (order < MIN_ORDER_FOR_OK_GROUP)
+        {
+            std::cout << "Skipping, because order is too low!" << std::endl;
+            --index;
+            continue;
+        }
 
         EM::EllipticGroup::PrivateKey alicePrivate = group.GeneratePrivateKey (order);
         EM::EllipticGroup::PrivateKey bobPrivate = group.GeneratePrivateKey (order);
 
+        std::cout << "Alice private: " << alicePrivate.multiplier_ << "." << std::endl;
+        std::cout << "Bob private: " << bobPrivate.multiplier_ << "." << std::endl;
+
         try
         {
             EM::EllipticGroup::PublicKey alicePublic = group.AssemblePublicKey (alicePrivate, g.value ());
-            EM::EllipticGroup::PublicKey bobPublic = group.AssemblePublicKey (bobPrivate, g.value ());
-
-            EM::EllipticGroup::CommonKey aliceCommon = group.AssembleCommonKey (alicePrivate, bobPublic);
-            EM::EllipticGroup::CommonKey bobCommon = group.AssembleCommonKey (bobPrivate, alicePublic);
-
-            std::cout << "Alice private: " << alicePrivate.multiplier_ << "." << std::endl;
             std::cout << "Alice public: (" << alicePublic.value_.x_ << ", " <<
                       alicePublic.value_.y_ << ")." << std::endl;
 
-            std::cout << "Alice view of common key: (" << aliceCommon.value_.x_ << ", " <<
-                      aliceCommon.value_.y_ << ")." << std::endl;
-
-            std::cout << "Bob private: " << bobPrivate.multiplier_ << "." << std::endl;
+            EM::EllipticGroup::PublicKey bobPublic = group.AssemblePublicKey (bobPrivate, g.value ());
             std::cout << "Bob public: (" << bobPublic.value_.x_ << ", " <<
                       bobPublic.value_.y_ << ")." << std::endl;
 
+            EM::EllipticGroup::CommonKey aliceCommon = group.AssembleCommonKey (alicePrivate, bobPublic);
+            std::cout << "Alice view of common key: (" << aliceCommon.value_.x_ << ", " <<
+                      aliceCommon.value_.y_ << ")." << std::endl;
+
+            EM::EllipticGroup::CommonKey bobCommon = group.AssembleCommonKey (bobPrivate, alicePublic);
             std::cout << "Bob view of common key: (" << bobCommon.value_.x_ << ", " <<
                       bobCommon.value_.y_ << ")." << std::endl;
 
             if (aliceCommon.value_ == bobCommon.value_)
             {
-                ++successes;
+                std::cout << "Exchange successful!" << std::endl;
+                ++exchangeSuccesses;
             }
             else
             {
-                ++fails;
+                std::cout << "Exchange failed!" << std::endl;
+                ++exchangeFails;
+            }
+
+            uint64_t messageHash = MathUtils::Random::Get ().Next ();
+            std::optional <EM::EllipticGroup::Signature> signature =
+                group.Sign (messageHash, alicePrivate, g.value (), order);
+
+            if (!signature.has_value ())
+            {
+                std::cout << "Unable to calculate signature!" << std::endl;
+                ++signatureNotCalculatedFails;
+                continue;
+            }
+
+            switch (group.Check (signature.value (), messageHash, alicePublic, g.value (), order))
+            {
+                case EM::EllipticGroup::SignatureCheckResult::SUCCESSFUL:
+                    std::cout << "Signature checked successfully!" << std::endl;
+                    ++signatureSuccesses;
+                    break;
+
+                case EM::EllipticGroup::SignatureCheckResult::MATH_ERROR:
+                    std::cout << "Signature check failed due to math error!" << std::endl;
+                    ++signatureMathFails;
+                    break;
+
+                case EM::EllipticGroup::SignatureCheckResult::FAILED:
+                    std::cout << "Signature check failed!" << std::endl;
+                    ++signatureFails;
+                    break;
             }
         }
-        catch (std::bad_optional_access exception)
+        catch (std::bad_optional_access &exception)
         {
             std::cout << "Caught infinity during key assembling!" << std::endl;
+            ++exchangeMathFails;
         }
     }
 
     std::cout << std::endl;
-    std::cout << "Successes: " << successes << std::endl;
-    std::cout << "Fails: " << fails << std::endl;
+    std::cout << "Exchange successes: " << exchangeSuccesses << std::endl;
+    std::cout << "Exchange fails: " << exchangeFails << std::endl;
+    std::cout << "Exchange math fails: " << exchangeMathFails << std::endl;
+
+    std::cout << std::endl;
+    std::cout << "Signature successes: " << signatureSuccesses << std::endl;
+    std::cout << "Signature fails: " << signatureFails << std::endl;
+    std::cout << "Signature not calculated fails: " << signatureNotCalculatedFails << std::endl;
+    std::cout << "Signature math fails: " << signatureMathFails << std::endl;
     return 0;
 }
